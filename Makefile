@@ -1,13 +1,23 @@
+ifndef FF_ROOT
+FF_ROOT		= $(HOME)/fastflow
+endif
+
+CXX		= g++-11 -std=c++2a  #-DNO_DEFAULT_MAPPING
+INCLUDES	= -I $(FF_ROOT) 
+CXXFLAGS  	= -Wall
 LINKERFLAG = -lm
-seq:
-	g++-11 -std=c++2a seq.cpp -o seq
-seqv1:
-	g++-11 -std=c++2a seq.v1.cpp -o seqv1
-par:
-	g++-11 -std=c++2a par.cpp -o par -pthread -O3 
-parv1:
-	g++-11 -std=c++2a par.v1.cpp -o parv1 -pthread -O3 
-ff:
-	make -f Makefile.ff
-grp:
-	g++-11 -std=c++2a graphgen.cpp -o graphgen
+
+LDFLAGS 	= -pthread
+OPTFLAGS	= -O3 -finline-functions -DNDEBUG
+
+.PHONY: all clean cleanall
+.SUFFIXES: .cpp 
+
+
+%: %.cpp
+	$(CXX) $(CXXFLAGS) ${INCLUDES} $(OPTFLAGS) -o $@ $< $(LDFLAGS) $(LINKERFLAG)
+
+ff: ff.cpp
+seq: seq
+par: par
+grp: grp

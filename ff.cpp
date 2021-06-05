@@ -17,14 +17,14 @@
 #include <ff/barrier.hpp>
 #include "utils.cpp"
 #include "utimer.cpp"
+#include <unistd.h>
 
 using namespace ff;
 using namespace std;
 static barrierSelector<0> bar;
 #define BARRIER   bar.doBarrier(get_my_id())
 
-std::mutex guarder;
-int level = 0;
+
 int nw;
 int occurancesX;
 int s;
@@ -32,145 +32,125 @@ int X;
 int num_nodes = 100;
 int min_edges_per_node = 1;
 int max_edges_per_node = 5;
-int sum = 1;
-vector<bool> processed;
-Node<int> source;
+mutex currentQueueGuarder;
+mutex checkCompletionGuarder;
+mutex tryStealGuarder;
+mutex checkProcessLock;
 Graph<int> graph;
-template <class T>
-struct params
-{
-	Graph<T>* graph;
-	int source;
-	int threadNumber;
-	vector<bool>* inQueueOnce;
-	vector< vector< queue< Node<T> > > >* levelQueues;
-	int* X;
-	int level;
-    vector<bool>* processed;
-	params(Graph<T>* graph, const int& source, const int& threadNumber, vector<bool>* inQueueOnce, vector< vector< queue< Node<T> > > >* levelQueues, int* X, int level, vector<bool>* processed)
-	{
-		this -> graph = graph;
-		this -> source = source;
-		this -> threadNumber = threadNumber;
-		this -> inQueueOnce = inQueueOnce;
-		this -> levelQueues = levelQueues;
-		this -> X = X;
-        this -> level = level;
-        this -> processed = processed;
-	}
-};
-
-void init_bfs(Graph<int>* graph, vector<Edge>* init_edges, vector<bool>* inQueueOnce, vector< vector< queue< Node<int> > > >* queues) {
-    int n = (*init_edges).size();
-    for (int i = 0; i < n; i++) {
-        if (!(*inQueueOnce)[(*init_edges)[i].getDestID()]) {
-            (*queues)[level][i % nw].push((*graph).getNode((*init_edges)[i].getDestID()));
-            (*inQueueOnce)[(*init_edges)[i].getDestID()] = true;
-        }
-        
-    }
-}
+vector<bool> processed;
+vector< queue< Node<int> > >  firstQueues;
+vector< queue< Node<int> > >  secondQueues;
 
 class Worker:public ff_node {
 public:
-    Worker(void* p ): p(p) {}
+    // Worker( vector<bool>* processed,
+    //         vector< queue< Node<int> > >*  firstQueues,
+    //         vector< queue< Node<int> > >*  secondQueues):
+    //         processed(processed), firstQueues(firstQueues), secondQueues(secondQueues) {}
+    // vector<bool>* processed;
+    // vector< queue< Node<int> > >*  firstQueues;
+    // vector< queue< Node<int> > >*  secondQueues;
     int run(bool=false)  { return ff_node::run();}
     int wait()           { return ff_node::wait();}
-    void* setp(void* p) {this->p = p;}
     void set_id(ssize_t id) {
         ff_node::set_id(id);
     }
     void *svc(void*) {
-	    params<int> parameters = *((params<int>*)p);
-        queue< Node<int> >& toVisit = ((*(parameters.levelQueues))[parameters.level][get_my_id()]);
-        int nextLevel = parameters.level ? 0 : 1;
-        queue< Node<int> >& toVisitNext = ((*(parameters.levelQueues))[nextLevel][get_my_id()]);
+        int tid = get_my_id();
+	    queue< Node<int> > currentQueue = firstQueues[tid];
+        queue< Node<int> > nextQueue = secondQueues[tid];
         bool done = false;
         int localX = 0;
+        bool firstQueue = true;        
         while (!done) {
-            //guarder.lock();
-            while (!toVisit.empty()) {
-                guarder.lock();
-                Node<int> current = toVisit.front();
-                toVisit.pop();
-                guarder.unlock();
-                if (current.getVal() == (*(parameters.X))) {
-                    localX ++;
-                    
-                }
-                (*(parameters.processed))[current.getNodeID()] = true;
+            while (!firstQueues[tid].empty()) {
+                currentQueueGuarder.lock();
+                Node<int> current = firstQueues[tid].front();
+                firstQueues[tid].pop();
+                currentQueueGuarder.unlock();
+                if (current.getVal() == X) localX ++;
+                usleep(1000); // We assume we make work on the current element being processed
                 vector<Edge> outboundEdges = current.getOutboundEdges();
-                guarder.lock();
                 for (int i = 0; i < outboundEdges.size(); ++i) {
-                    if (!((*(parameters.inQueueOnce))[outboundEdges[i].getDestID()])) {
-                        guarder.lock();
-                        (*(parameters.inQueueOnce))[outboundEdges[i].getDestID()] = true;
-                        guarder.unlock();
-                        toVisitNext.push(parameters.graph -> getNode(outboundEdges[i].getDestID()));
+                    if (!processed[outboundEdges[i].getDestID()]) {
+                        checkProcessLock.lock();
+                        processed[outboundEdges[i].getDestID()] = true;
+                        checkProcessLock.unlock();
+                        secondQueues[tid].push(graph.getNode(outboundEdges[i].getDestID()));
                     }
                 }
-                
                 
             }
             done = true;
             for (int i = 0; i < nw; ++i) {
-                guarder.unlock();
-                done |= (!(*(parameters.levelQueues))[parameters.level][i].empty());
-                 guarder.unlock();
+                done |= !firstQueues[i].empty();
             }
-            
             if (!done) {
+                currentQueueGuarder.lock();
                 for (int i = 0; i < nw; ++i) {
-                    if ((*(parameters.levelQueues))[parameters.level][i].size() > 1) {
-                        guarder.lock();
-                        toVisit.push((*(parameters.levelQueues))[parameters.level][i].front());
-                        (*(parameters.levelQueues))[parameters.level][i].pop();
-                        guarder.unlock();
+                    if (firstQueues[i].size() > 1) {
+                        firstQueues[tid].push(firstQueues[i].front());
+                        firstQueues[i].pop();
                         break;
                     }
                 }
+                currentQueueGuarder.unlock();
+            } else {
+                //printf("I am thread %d and i am beforeeee \n", tid);
+                BARRIER; // Barrier to wait next iteration
+                if(tid == 0) swap(firstQueues, secondQueues);
+                BARRIER;
+                currentQueue = firstQueues[tid];
+                nextQueue = secondQueues[tid]; 
+                if(!currentQueue.empty()) done = false; // Continue if there's still work
             }
-            
         }
-        guarder.lock();
+        checkCompletionGuarder.lock();
         occurancesX += localX;
-        guarder.unlock();
-        BARRIER;
+        checkCompletionGuarder.unlock();
         return 0;
-    }
-protected:
-    void* p;
+    }    
 };
 
 int main(int argc, char *argv[]) {
+    
     s = atoi(argv[1]); // We get the source nodeID
     X = atoi(argv[2]); // We get the value to compute the occurancesX of
     nw = atoi(argv[3]); // We get the value to compute the occurancesX of
+    
     if(argc == 7) {
         num_nodes = atoi(argv[4]); // We get the number of nodes to be generated 
         min_edges_per_node = atoi(argv[5]); // We get the minimum number of edges per node
         max_edges_per_node = atoi(argv[6]); // We get the maximum number of edges per node
     }
     
-
     auto filename = "data/" + to_string(num_nodes) + "_" + to_string(min_edges_per_node) + "_" + to_string(max_edges_per_node) + ".txt";
     printf ("Running ff with: %d threads, %d nodes which have a minimum of %d edges and a maximum of %d edges\n", nw, num_nodes, min_edges_per_node, max_edges_per_node);
+    
+    
 
     {   utimer tpg("process graph");
         processGraph(&graph, filename);
     }
-    source = graph.getNode(s);
-    vector< vector< queue< Node<int> > > > queues(2, vector< queue< Node<int> > >(nw));
-    vector<Edge> init_edges = source.getOutboundEdges();
-    vector<bool> inQueueOnce(num_nodes);
-    vector<bool> processed(num_nodes);
-    inQueueOnce[s] = true;
-    processed[s] = true;
-    params<int> p(&graph, s, 0, &inQueueOnce, &queues, &X, level, &processed);
+    Node<int> source = graph.getNode(s);
+    processed.resize(num_nodes);
+    firstQueues.resize(nw);
+    secondQueues.resize(nw);
 
-    {   utimer tpg("process init queues");
-        init_bfs(&graph, &init_edges, &inQueueOnce, &queues);
+    // We run condition 
+    {   utimer tpg("Dispatch jobs of source node to different queues");
+        processed[source.getNodeID()] = true;
+        if(source.getVal() == X) occurancesX++;
+        usleep(1000); // We assume we make work on the current element being processed
+        vector<Edge> init_edges = source.getOutboundEdges();
+        for(int i = 0; i < init_edges.size(); i++) {
+            if (!processed[init_edges[i].getDestID()]) {
+                firstQueues[nw > 1 ? i % nw : 0].push(graph.getNode(init_edges[i].getDestID()));
+                processed[init_edges[i].getDestID()] = true;
+            }
+        }
     }
+
     {   utimer tpg("process ff par");
         // ff_farm farm;
         // std::vector<ff_node*> w;
@@ -186,25 +166,14 @@ int main(int argc, char *argv[]) {
         bar.barrierSetup(nw);
         int iter = 0;
         for(int i=0;i<nw;++i) {
-            N[i]= new Worker((void*)&p);
-            //printf("Created thread with %d id \n", i);
+            N[i]= new Worker();
             N[i]->set_id(i);
         }
-        while(!all_of(processed.begin(), processed.end(), [](bool v) { return v; })){
-            //printf("Iteration number %d and level is %d \n", iter, p.level);
-            for(int i=0;i<nw;++i) {
-                // printf("Before run %d id \n", i);
-                N[i]->run();
-                // printf("After run %d id \n", i);
-            }
-            for(int i=0;i<nw;++i) {
-                // printf("Before wait %d id \n", i);
-                N[i]->wait();
-                // printf("After wait %d id \n", i);
-            }
-            level = level ? 0 : 1;
-            iter++;
-            p.level = level;
+        for(int i=0;i<nw;++i) {
+            N[i]->run();
+        }
+        for(int i=0;i<nw;++i) {
+            N[i]->wait();
         }
         
     }

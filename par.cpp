@@ -21,14 +21,12 @@ int X;
 int num_nodes = 100;
 int min_edges_per_node = 1;
 int max_edges_per_node = 5;
+mutex currentQueueGuarder;
+mutex checkCompletionGuarder;
+mutex tryStealGuarder;
+mutex checkProcessLock;
 
-// 4609352
-// 4461896
-// 377439
-template <class T> void swap (T& a, T& b)
-{
-  T c(std::move(a)); a=std::move(b); b=std::move(c);
-}
+
 int main(int argc, char** argv) {
     
 
@@ -45,11 +43,6 @@ int main(int argc, char** argv) {
     auto filename = "data/" + to_string(num_nodes) + "_" + to_string(min_edges_per_node) + "_" + to_string(max_edges_per_node) + ".txt";
     printf ("Running par with: %d threads, %d nodes which have a minimum of %d edges and a maximum of %d edges\n", nw, num_nodes, min_edges_per_node, max_edges_per_node);
     
-    mutex currentQueueGuarder;
-    mutex checkCompletionGuarder;
-    mutex tryStealGuarder;
-    mutex checkProcessLock;
-    mutex m;
     vector<thread> threads;
     Graph<int> graph;
 
@@ -57,19 +50,22 @@ int main(int argc, char** argv) {
         processGraph(&graph, filename);
     }
     Node<int> source = graph.getNode(s);
-    vector<Edge> init_edges = source.getOutboundEdges();
     vector<bool> processed(num_nodes);
     vector< queue< Node<int> > >  firstQueues(nw);
     vector< queue< Node<int> > >  secondQueues(nw);
     barrier work_done{nw};
     
     // We run condition 
-    processed[source.getNodeID()] = true;
-    if(source.getVal() == X) occurancesX++;
-    for(int i = 0; i < init_edges.size(); i++) {
-        if (!processed[init_edges[i].getDestID()]) {
-            firstQueues[nw > 1 ? i % nw : 0].push(graph.getNode(init_edges[i].getDestID()));
-            processed[init_edges[i].getDestID()] = true;
+    {   utimer tpg("Dispatch jobs of source node to different queues");
+        processed[source.getNodeID()] = true;
+        if(source.getVal() == X) occurancesX++;
+        usleep(1000); // We assume we make work on the current element being processed
+        vector<Edge> init_edges = source.getOutboundEdges();
+        for(int i = 0; i < init_edges.size(); i++) {
+            if (!processed[init_edges[i].getDestID()]) {
+                firstQueues[nw > 1 ? i % nw : 0].push(graph.getNode(init_edges[i].getDestID()));
+                processed[init_edges[i].getDestID()] = true;
+            }
         }
     }
     auto bfs = [&](int tid) {
@@ -80,46 +76,42 @@ int main(int argc, char** argv) {
         bool firstQueue = true;        
         while (!done) {
             while (!firstQueues[tid].empty()) {
-                // currentQueueGuarder.lock();
+                currentQueueGuarder.lock();
                 Node<int> current = firstQueues[tid].front();
                 firstQueues[tid].pop();
-                // currentQueueGuarder.unlock();
+                currentQueueGuarder.unlock();
                 if (current.getVal() == X) localX ++;
+                usleep(1000); // We assume we make work on the current element being processed
                 vector<Edge> outboundEdges = current.getOutboundEdges();
-                
                 for (int i = 0; i < outboundEdges.size(); ++i) {
                     if (!processed[outboundEdges[i].getDestID()]) {
-                        // checkProcessLock.lock();
+                        checkProcessLock.lock();
                         processed[outboundEdges[i].getDestID()] = true;
-                        // checkProcessLock.unlock();
+                        checkProcessLock.unlock();
                         secondQueues[tid].push(graph.getNode(outboundEdges[i].getDestID()));
                     }
                 }
                 
             }
             done = true;
-            // tryStealGuarder.lock();
             for (int i = 0; i < nw; ++i) {
                 done |= !firstQueues[i].empty();
             }
-            // tryStealGuarder.unlock();
-
             if (!done) {
+                currentQueueGuarder.lock();
                 for (int i = 0; i < nw; ++i) {
                     if (firstQueues[i].size() > 1) {
-                        // currentQueueGuarder.lock();
                         firstQueues[tid].push(firstQueues[i].front());
                         firstQueues[i].pop();
-                        // currentQueueGuarder.unlock();
                         break;
                     }
                 }
+                currentQueueGuarder.unlock();
             } else {
                 //printf("I am thread %d and i am beforeeee \n", tid);
                 work_done.arrive_and_wait(); // Barrier to wait next iteration
                 if(tid == 0) swap(firstQueues, secondQueues);
                 work_done.arrive_and_wait(); 
-                //printf("I am thread %d and i am after \n", tid);
                 currentQueue = firstQueues[tid];
                 nextQueue = secondQueues[tid]; 
                 if(!firstQueues[tid].empty()) done = false; // Continue if there's still work

@@ -44,6 +44,7 @@ int main(int argc, char** argv) {
         {
             Node<int> current = q.front();
             q.pop();
+            usleep(1000);
             if (current.getVal() == X) {
                 occurancesX++;
             }

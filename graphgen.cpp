@@ -21,14 +21,11 @@ int main(int argc, char** argv)
     int num_edges; // The number of edges that will be calculated randomly foreach node
     int randID;
     vector<int> indices; // Set of indices 
-    vector<int> nodeIDs(num_nodes, 0);
-    vector<pair<int, int>> edgesCombinationsInserted;
     pair<int, int>p = make_pair(0, 0);
     ofstream graph(filename);
     auto pairFound = false;
     graph << num_nodes << endl; // We write the number of nodes so we know when to stop when we parse it
     for (int i = 0; i < num_nodes; ++i) {
-        nodeIDs.push_back(i);
         graph << (i) << " " << (rand() % max_node_value + 1) << '\n'; // We insert in each line the nodeID and a random value from 1 to 120 that will be the node value 
     }
 
@@ -36,7 +33,7 @@ int main(int argc, char** argv)
         num_edges = rand() % max_edges_per_node + min_edges_per_node; // We define a number of nodes
         indices = {i};
         while(num_edges > 0) {
-            randID = nodeIDs[rand() % nodeIDs.size()]; 
+            randID = rand() % num_nodes; 
             if(find(indices.begin(), indices.end(), randID) == indices.end()) {
                 indices.push_back(randID);
                 graph << (i) << " " << (randID) << '\n'; // We insert a line foreach edge the current node has while we have num_edges available to insert avoiding duplicates or the insertion of i
