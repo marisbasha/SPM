@@ -32,6 +32,7 @@ int X;
 int num_nodes = 100;
 int min_edges_per_node = 1;
 int max_edges_per_node = 5;
+bool is_farm;
 mutex currentQueueGuarder;
 mutex checkCompletionGuarder;
 mutex tryStealGuarder;
@@ -43,13 +44,11 @@ vector< queue< Node<int> > >  secondQueues;
 
 class Worker:public ff_node {
 public:
-    // Worker( vector<bool>* processed,
-    //         vector< queue< Node<int> > >*  firstQueues,
-    //         vector< queue< Node<int> > >*  secondQueues):
-    //         processed(processed), firstQueues(firstQueues), secondQueues(secondQueues) {}
-    // vector<bool>* processed;
-    // vector< queue< Node<int> > >*  firstQueues;
-    // vector< queue< Node<int> > >*  secondQueues;
+    Worker(int t = -1): t(t) {}
+    int svc_init() {
+        if(t != -1) set_id(t);
+        return 0;
+    }
     int run(bool=false)  { return ff_node::run();}
     int wait()           { return ff_node::wait();}
     void set_id(ssize_t id) {
@@ -60,8 +59,6 @@ public:
 	    queue< Node<int> > currentQueue = firstQueues[tid];
         queue< Node<int> > nextQueue = secondQueues[tid];
         bool done = false;
-        int localX = 0;
-        bool firstQueue = true;        
         while (!done) {
             while (!firstQueues[tid].empty()) {
                 currentQueueGuarder.lock();
@@ -71,7 +68,7 @@ public:
                 if (current.getVal() == X) localX ++;
                 usleep(1000); // We assume we make work on the current element being processed
                 vector<Edge> outboundEdges = current.getOutboundEdges();
-                for (int i = 0; i < outboundEdges.size(); ++i) {
+                for (long unsigned int i = 0; i < outboundEdges.size(); ++i) {
                     if (!processed[outboundEdges[i].getDestID()]) {
                         checkProcessLock.lock();
                         processed[outboundEdges[i].getDestID()] = true;
@@ -105,11 +102,17 @@ public:
                 if(!currentQueue.empty()) done = false; // Continue if there's still work
             }
         }
+        
+        return 0;
+    }  
+    void  svc_end()  {
         checkCompletionGuarder.lock();
         occurancesX += localX;
         checkCompletionGuarder.unlock();
-        return 0;
-    }    
+    }  
+protected:
+    int t;
+    int localX;
 };
 
 int main(int argc, char *argv[]) {
@@ -118,11 +121,14 @@ int main(int argc, char *argv[]) {
     X = atoi(argv[2]); // We get the value to compute the occurancesX of
     nw = atoi(argv[3]); // We get the value to compute the occurancesX of
     
-    if(argc == 7) {
+    if(argc > 6) {
         num_nodes = atoi(argv[4]); // We get the number of nodes to be generated 
         min_edges_per_node = atoi(argv[5]); // We get the minimum number of edges per node
         max_edges_per_node = atoi(argv[6]); // We get the maximum number of edges per node
     }
+
+    if(argc > 7 && !strcmp(argv[7], "farm")) is_farm = true;
+
     
     auto filename = "data/" + to_string(num_nodes) + "_" + to_string(min_edges_per_node) + "_" + to_string(max_edges_per_node) + ".txt";
     printf ("Running ff with: %d threads, %d nodes which have a minimum of %d edges and a maximum of %d edges\n", nw, num_nodes, min_edges_per_node, max_edges_per_node);
@@ -143,7 +149,7 @@ int main(int argc, char *argv[]) {
         if(source.getVal() == X) occurancesX++;
         usleep(1000); // We assume we make work on the current element being processed
         vector<Edge> init_edges = source.getOutboundEdges();
-        for(int i = 0; i < init_edges.size(); i++) {
+        for(long unsigned int i = 0; i < init_edges.size(); i++) {
             if (!processed[init_edges[i].getDestID()]) {
                 firstQueues[nw > 1 ? i % nw : 0].push(graph.getNode(init_edges[i].getDestID()));
                 processed[init_edges[i].getDestID()] = true;
@@ -152,32 +158,32 @@ int main(int argc, char *argv[]) {
     }
 
     {   utimer tpg("process ff par");
-        // ff_farm farm;
-        // std::vector<ff_node*> w;
-        // for(int i=0;i<nw;++i)
-        //     w.push_back(new Worker(&p));
-        // farm.add_workers(w);
-        // farm.add_emitter(new Emitter(w, &p));
-        // farm.wrap_around();
-        // if (farm.run_then_freeze()<0) {
-        //     error("running farm ff_graphsearch\n");
-        // } else farm.wait_freezing();
-        Worker** N = new Worker*[nw];
         bar.barrierSetup(nw);
-        int iter = 0;
-        for(int i=0;i<nw;++i) {
-            N[i]= new Worker();
-            N[i]->set_id(i);
-        }
-        for(int i=0;i<nw;++i) {
-            N[i]->run();
-        }
-        for(int i=0;i<nw;++i) {
-            N[i]->wait();
-        }
-        
+        if(is_farm) {
+            ff_farm farm;
+            vector<ff_node*> w;
+            for(int i=0;i<nw;++i)
+                w.push_back(new Worker(i));
+            farm.add_workers(w);
+            if (farm.run_then_freeze()<0) {
+                error("Running bfs par ff \n");
+            } else farm.wait_freezing();
+        } 
+        else {
+            Worker** N = new Worker*[nw];
+            for(int i=0;i<nw;++i) {
+                N[i]= new Worker();
+                N[i]->set_id(i);
+            }
+            for(int i=0;i<nw;++i) {
+                N[i]->run();
+            }
+            for(int i=0;i<nw;++i) {
+                N[i]->wait();
+            } 
+        }  
     }
-    printf ("The number of instances of:: %d is %d \n",  X, occurancesX);
+    printf ("The number of instances of X = %d is %d \n",  X, occurancesX);
     return 0;
 }
 

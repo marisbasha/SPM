@@ -61,7 +61,7 @@ int main(int argc, char** argv) {
         if(source.getVal() == X) occurancesX++;
         usleep(1000); // We assume we make work on the current element being processed
         vector<Edge> init_edges = source.getOutboundEdges();
-        for(int i = 0; i < init_edges.size(); i++) {
+        for(long unsigned int i = 0; i < init_edges.size(); i++) {
             if (!processed[init_edges[i].getDestID()]) {
                 firstQueues[nw > 1 ? i % nw : 0].push(graph.getNode(init_edges[i].getDestID()));
                 processed[init_edges[i].getDestID()] = true;
@@ -73,7 +73,6 @@ int main(int argc, char** argv) {
         queue< Node<int> > nextQueue = secondQueues[tid];
         bool done = false;
         int localX = 0;
-        bool firstQueue = true;        
         while (!done) {
             while (!firstQueues[tid].empty()) {
                 currentQueueGuarder.lock();
@@ -83,7 +82,7 @@ int main(int argc, char** argv) {
                 if (current.getVal() == X) localX ++;
                 usleep(1000); // We assume we make work on the current element being processed
                 vector<Edge> outboundEdges = current.getOutboundEdges();
-                for (int i = 0; i < outboundEdges.size(); ++i) {
+                for (long unsigned int i = 0; i < outboundEdges.size(); ++i) {
                     if (!processed[outboundEdges[i].getDestID()]) {
                         checkProcessLock.lock();
                         processed[outboundEdges[i].getDestID()] = true;
@@ -130,6 +129,6 @@ int main(int argc, char** argv) {
         }
     }
      
-    printf ("The number of instances of: %d is %d \n",  X, occurancesX);
+    printf ("The number of instances of X = %d is %d \n",  X, occurancesX);
     return 0;
 }

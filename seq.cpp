@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
                 occurancesX++;
             }
             vector<Edge> outboundEdges = current.getOutboundEdges();
-            for (int i = 0; i < outboundEdges.size(); ++i) {
+            for (long unsigned int i = 0; i < outboundEdges.size(); ++i) {
                 if (!visited[outboundEdges[i].getDestID()]) {
                     q.push(g.getNode(outboundEdges[i].getDestID()));
                     visited[outboundEdges[i].getDestID()] = true;
@@ -61,6 +61,6 @@ int main(int argc, char** argv) {
     {   utimer tsbfs("serial bfs");
         bfs();
     }
-    printf ("The number of instances of:: %d is %d \n",  X, occurancesX);
+    printf ("The number of instances of X = %d is %d \n",  X, occurancesX);
     return 0;
 }

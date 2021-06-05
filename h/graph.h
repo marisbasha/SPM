@@ -18,14 +18,14 @@ class Graph {
         Graph(const std::vector<Node<NodeT>>& nodes); // Creates a graph using the specified list of Nodes
         
         Graph& addNode(const Node<NodeT>& node); // Adds a Node Object to the Graph and assigns it the next available NodeID
-        Graph& addNode(const int& nodeID, const NodeT& data); // Adds a Node with specified data and assigns it the next available NodeID
+        Graph& addNode(const long unsigned int& nodeID, const NodeT& data); // Adds a Node with specified data and assigns it the next available NodeID
         Graph& addNode(const NodeT& data); // Adds a Node with specified data and assigns it the next available NodeID
         
-        Graph& addEdge(const int& sourceID, const Edge& edge); // Adds an Edge Object to the Graph at the node specified by sourceID
-        Graph& addEdge(const int& sourceID, const int& destID); // Adds an Edge from source node to dest node
+        Graph& addEdge(const long unsigned int& sourceID, const Edge& edge); // Adds an Edge Object to the Graph at the node specified by sourceID
+        Graph& addEdge(const long unsigned int& sourceID, const long unsigned int& destID); // Adds an Edge from source node to dest node
         
-        Node<NodeT> getNode(const int& nodeID) const; // Returns the specified Node from the Node List
-        int getNumberOfNodes() const; // Returns the number of nodes in the graph
+        Node<NodeT> getNode(const long unsigned int& nodeID) const; // Returns the specified Node from the Node List
+        long unsigned int getNumberOfNodes() const; // Returns the number of nodes in the graph
 };
 
 template <class NodeT>
@@ -49,13 +49,13 @@ Graph<NodeT>& Graph<NodeT>::addNode(const NodeT& data) {
 }
 
 template <class NodeT>
-Graph<NodeT>& Graph<NodeT>::addNode(const int& nodeID, const NodeT& data) {
+Graph<NodeT>& Graph<NodeT>::addNode(const long unsigned int& nodeID, const NodeT& data) {
 	nodes.push_back(Node<NodeT>(nodeID, data));
 	return (*this);
 }
 
 template <class NodeT>
-Graph<NodeT>& Graph<NodeT>::addEdge(const int& sourceID, const Edge& edge) {
+Graph<NodeT>& Graph<NodeT>::addEdge(const long unsigned int& sourceID, const Edge& edge) {
 	if (sourceID >= nodes.size()) {
 		std::cout << "ERROR: Specified sourceID is not in the Graph." << std::endl;
 		exit(EXIT_FAILURE);
@@ -65,7 +65,7 @@ Graph<NodeT>& Graph<NodeT>::addEdge(const int& sourceID, const Edge& edge) {
 }
 
 template <class NodeT>
-Graph<NodeT>& Graph<NodeT>::addEdge(const int& sourceID, const int& destID) {
+Graph<NodeT>& Graph<NodeT>::addEdge(const long unsigned int& sourceID, const long unsigned int& destID) {
 	if (sourceID >= nodes.size()) {
 		std::cout << "ERROR: Specified sourceID is not in the Graph." << std::endl;
 		exit(EXIT_FAILURE);
@@ -75,7 +75,7 @@ Graph<NodeT>& Graph<NodeT>::addEdge(const int& sourceID, const int& destID) {
 }
 
 template <class NodeT>
-Node<NodeT> Graph<NodeT>::getNode(const int& nodeID) const {
+Node<NodeT> Graph<NodeT>::getNode(const long unsigned int& nodeID) const {
 	if (nodeID >= nodes.size()) {
 		std::cout << "ERROR: Specified nodeID is not in the Graph." << std::endl;
 		exit(EXIT_FAILURE);
@@ -84,7 +84,7 @@ Node<NodeT> Graph<NodeT>::getNode(const int& nodeID) const {
 }
 
 template <class NodeT>
-int Graph<NodeT>::getNumberOfNodes() const {
+long unsigned int Graph<NodeT>::getNumberOfNodes() const {
 	return nodes.size();
 }
 

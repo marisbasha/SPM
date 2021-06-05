@@ -1,0 +1,12 @@
+Running seq
+data/1000_4_10.txt
+process graph computed in 5730 usec 
+serial bfs computed in 2059 usec 
+The number of instances of: 41 is 11
+1
+Running par with: 1 threads, 1000 nodes which have a minimum of 4 edges and a maximum of 10 edges
+process graph computed in 2461 usec 
+process init queues computed in 12 usec 
+iter is 0
+Thread number called is 0iter is 1
+Thread number called is 0iter is 2
