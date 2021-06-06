@@ -1,4 +1,4 @@
-#include <barrier>
+// #include <Barrier>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -11,7 +11,8 @@
 #include "utils.cpp"
 #include "utimer.cpp"
 #include <unistd.h>
-
+#include <mutex>
+#include <atomic>
 using namespace std;
 
 int nw;
@@ -23,9 +24,42 @@ int min_edges_per_node = 1;
 int max_edges_per_node = 5;
 mutex currentQueueGuarder;
 mutex checkCompletionGuarder;
-mutex tryStealGuarder;
+mutex decreaseActive;
 mutex checkProcessLock;
 
+
+class Barrier
+{
+public:
+  Barrier(const Barrier&) = delete;
+  Barrier& operator=(const Barrier&) = delete;
+  explicit Barrier( int count) :
+    passed_barrier(0), iteration_number(0), 
+    passed_barrier_reset_value(count)
+  {
+  }
+  void decrease_active_threads(){
+    passed_barrier_reset_value = (passed_barrier_reset_value == 0 ? 0 : passed_barrier_reset_value - 1);
+  }
+  void count_down_and_wait()
+  {
+    int gen = iteration_number.load();
+    if ( ++passed_barrier >= passed_barrier_reset_value) {
+      if (iteration_number.compare_exchange_weak(gen, gen + 1)) {
+        passed_barrier = 0;
+      }
+      return;
+    }
+
+    while ((gen == iteration_number) && (passed_barrier <= passed_barrier_reset_value))
+      std::this_thread::yield();
+  }
+
+private:
+  std::atomic< int> passed_barrier;
+  std::atomic< int> iteration_number;
+  int passed_barrier_reset_value;
+};
 
 int main(int argc, char** argv) {
     
@@ -33,7 +67,6 @@ int main(int argc, char** argv) {
     s = atoi(argv[1]); // We get the source nodeID
     X = atoi(argv[2]); // We get the value to compute the occurancesX of
     nw = atoi(argv[3]); // We get the value to compute the occurancesX of
-    
     if(argc == 7) {
         num_nodes = atoi(argv[4]); // We get the number of nodes to be generated 
         min_edges_per_node = atoi(argv[5]); // We get the minimum number of edges per node
@@ -41,7 +74,7 @@ int main(int argc, char** argv) {
     }
     
     auto filename = "data/" + to_string(num_nodes) + "_" + to_string(min_edges_per_node) + "_" + to_string(max_edges_per_node) + ".txt";
-    printf ("Running par with: %d threads, %d nodes which have a minimum of %d edges and a maximum of %d edges\n", nw, num_nodes, min_edges_per_node, max_edges_per_node);
+    printf ("PARCPP:%d:%d:%d:%d\n", nw, num_nodes, min_edges_per_node, max_edges_per_node);
     
     vector<thread> threads;
     Graph<int> graph;
@@ -53,13 +86,13 @@ int main(int argc, char** argv) {
     vector<bool> processed(num_nodes);
     vector< queue< Node<int> > >  firstQueues(nw);
     vector< queue< Node<int> > >  secondQueues(nw);
-    barrier work_done{nw};
+    Barrier work_done{nw};
     
     // We run condition 
-    {   utimer tpg("Dispatch jobs of source node to different queues");
+    {   utimer tpg("Dispatch");
         processed[source.getNodeID()] = true;
         if(source.getVal() == X) occurancesX++;
-        usleep(1000); // We assume we make work on the current element being processed
+        //usleep(5000); // We assume we make work on the current element being processed
         vector<Edge> init_edges = source.getOutboundEdges();
         for(long unsigned int i = 0; i < init_edges.size(); i++) {
             if (!processed[init_edges[i].getDestID()]) {
@@ -74,20 +107,20 @@ int main(int argc, char** argv) {
         bool done = false;
         int localX = 0;
         while (!done) {
-            while (!firstQueues[tid].empty()) {
+            while (!currentQueue.empty()) {
                 currentQueueGuarder.lock();
-                Node<int> current = firstQueues[tid].front();
-                firstQueues[tid].pop();
+                Node<int> current = currentQueue.front();
+                currentQueue.pop();
                 currentQueueGuarder.unlock();
                 if (current.getVal() == X) localX ++;
-                usleep(1000); // We assume we make work on the current element being processed
+                //usleep(5000); // We assume we make work on the current element being processed
                 vector<Edge> outboundEdges = current.getOutboundEdges();
                 for (long unsigned int i = 0; i < outboundEdges.size(); ++i) {
                     if (!processed[outboundEdges[i].getDestID()]) {
                         checkProcessLock.lock();
                         processed[outboundEdges[i].getDestID()] = true;
                         checkProcessLock.unlock();
-                        secondQueues[tid].push(graph.getNode(outboundEdges[i].getDestID()));
+                        nextQueue.push(graph.getNode(outboundEdges[i].getDestID()));
                     }
                 }
                 
@@ -97,30 +130,39 @@ int main(int argc, char** argv) {
                 done |= !firstQueues[i].empty();
             }
             if (!done) {
-                currentQueueGuarder.lock();
+                
                 for (int i = 0; i < nw; ++i) {
                     if (firstQueues[i].size() > 1) {
-                        firstQueues[tid].push(firstQueues[i].front());
+                        currentQueueGuarder.lock();
+                        currentQueue.push(firstQueues[i].front());
                         firstQueues[i].pop();
+                        currentQueueGuarder.unlock();
                         break;
                     }
                 }
-                currentQueueGuarder.unlock();
+                
             } else {
-                //printf("I am thread %d and i am beforeeee \n", tid);
-                work_done.arrive_and_wait(); // Barrier to wait next iteration
-                if(tid == 0) swap(firstQueues, secondQueues);
-                work_done.arrive_and_wait(); 
-                currentQueue = firstQueues[tid];
-                nextQueue = secondQueues[tid]; 
-                if(!firstQueues[tid].empty()) done = false; // Continue if there's still work
+                //printf("I am thread %d and i am beforeeee with firstQueues[tid].: %d and secondQueues[tid]: %d  \n", tid, currentQueue.size(), nextQueue.size());
+                work_done.count_down_and_wait(); // Barrier to wait next iteration
+                queue<Node<int>> t = currentQueue;
+                currentQueue = nextQueue;
+                nextQueue = t;
+                work_done.count_down_and_wait(); // Barrier to wait next iteration
+                //printf("After wait I am thread %d and i am beforeeee with firstQueues[tid].: %d and secondQueues[tid]: %d  \n", tid, currentQueue.size(), nextQueue.size());
+                if(!currentQueue.empty()) { done = false; } // Continue if there's still work
+                
+            }
+            if(done) {
+                decreaseActive.lock();
+                work_done.decrease_active_threads();
+                decreaseActive.unlock();
             }
         }
         checkCompletionGuarder.lock();
         occurancesX += localX;
         checkCompletionGuarder.unlock();
     };
-    {   utimer tpg("par time ");
+    {   utimer tpg("PAR_TIME");
         for(int i=0;i<nw;i++) {
             threads.emplace_back(bfs, i);
         }
@@ -129,6 +171,6 @@ int main(int argc, char** argv) {
         }
     }
      
-    printf ("The number of instances of X = %d is %d \n",  X, occurancesX);
+    printf ("X = %d has %d instances \n",  X, occurancesX);
     return 0;
 }

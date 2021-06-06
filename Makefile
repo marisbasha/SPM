@@ -2,7 +2,7 @@ ifndef FF_ROOT
 FF_ROOT		= $(HOME)/fastflow
 endif
 
-CXX		= g++-11 -std=c++2a  #-DNO_DEFAULT_MAPPING
+CXX		= g++ -std=c++2a  #-DNO_DEFAULT_MAPPING
 INCLUDES	= -I $(FF_ROOT) 
 CXXFLAGS  	= -Wall
 LINKERFLAG = -lm
@@ -14,10 +14,11 @@ OPTFLAGS	= -O3 -finline-functions -DNDEBUG
 .SUFFIXES: .cpp 
 
 
-%: %.cpp
+ff:  ff.cpp
 	$(CXX) $(CXXFLAGS) ${INCLUDES} $(OPTFLAGS) -o $@ $< $(LDFLAGS) $(LINKERFLAG)
-
-ff: ff.cpp
-seq: seq
-par: par
-grp: grp
+seq: seq.cpp
+	$(CXX) $(CXXFLAGS)  $(OPTFLAGS) -o $@ $<  $(LINKERFLAG)
+par: par.cpp
+	$(CXX) $(CXXFLAGS) $(OPTFLAGS) -o $@ $< $(LDFLAGS) $(LINKERFLAG)
+grp: grp.cpp
+	$(CXX) $(CXXFLAGS) $(OPTFLAGS) -o $@ $< $(LINKERFLAG)

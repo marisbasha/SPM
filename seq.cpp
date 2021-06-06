@@ -28,10 +28,9 @@ int main(int argc, char** argv) {
     }
     
     auto filename = "data/" + to_string(num_nodes) + "_" + to_string(min_edges_per_node) + "_" + to_string(max_edges_per_node) + ".txt";
-    printf ("Running seq with: %d nodes which have a minimum of %d edges and a maximum of %d edges\n",  num_nodes, min_edges_per_node, max_edges_per_node);
-    cout << filename << endl;
+    printf ("SEQCPP:%d:%d:%d\n",  num_nodes, min_edges_per_node, max_edges_per_node);
     Graph<int> g;
-    {   utimer tpg("process graph");
+    {   utimer tpg("Graph");
         processGraph(&g, filename);
     }
 
@@ -44,7 +43,7 @@ int main(int argc, char** argv) {
         {
             Node<int> current = q.front();
             q.pop();
-            usleep(1000);
+            //usleep(5000);
             if (current.getVal() == X) {
                 occurancesX++;
             }
@@ -58,9 +57,9 @@ int main(int argc, char** argv) {
             
         }
     };
-    {   utimer tsbfs("serial bfs");
+    {   utimer tsbfs("SERIAL_TIME");
         bfs();
     }
-    printf ("The number of instances of X = %d is %d \n",  X, occurancesX);
+    printf ("X = %d has %d instances \n",  X, occurancesX);
     return 0;
 }
