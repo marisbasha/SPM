@@ -19,6 +19,6 @@ void processGraph(Graph<int>* graph, string filename) {
         int src, dest;
 		file >> src >> dest;
 		graph->addEdge(src, dest);
-        // graph->addEdge(dest, src);
+		graph->addEdge(dest, src);
     }
 }

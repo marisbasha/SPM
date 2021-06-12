@@ -27,38 +27,57 @@ int main(int argc, char** argv) {
         max_edges_per_node = atoi(argv[5]); // We get the maximum number of edges per node
     }
     
-    auto filename = "data/" + to_string(num_nodes) + "_" + to_string(min_edges_per_node) + "_" + to_string(max_edges_per_node) + ".txt";
+    auto filename = "data/graphs/" + to_string(num_nodes) + "_" + to_string(min_edges_per_node) + "_" + to_string(max_edges_per_node) + ".txt";
     printf ("SEQCPP:%d:%d:%d\n",  num_nodes, min_edges_per_node, max_edges_per_node);
     Graph<int> g;
     {   utimer tpg("Graph");
         processGraph(&g, filename);
     }
 
-    auto bfs = [&](){
+    {   utimer tsbfs("SERIAL_TIME");
         vector<bool> visited(num_nodes, false);
         queue< Node<int> > q;
+        Node<int> current;
         q.push(g.getNode(s));
         visited[s] = true;
+#ifdef WITHTIME 
+            {   utimer tpg("Time 1 while loop");
+#endif
         while (!q.empty())
         {
-            Node<int> current = q.front();
+
+            current = q.front();
             q.pop();
-            //usleep(5000);
+#ifdef WITHTIME 
+            }
+#endif
+#ifdef WAIT
+            usleep(5000);
+#endif
+#ifdef WITHTIME 
+            {   utimer tpg("Time to check X update");
+#endif
             if (current.getVal() == X) {
                 occurancesX++;
             }
+#ifdef WITHTIME 
+            }
+#endif
             vector<Edge> outboundEdges = current.getOutboundEdges();
+#ifdef WITHTIME 
+            {   utimer tpg("Time for edges");
+#endif
             for (long unsigned int i = 0; i < outboundEdges.size(); ++i) {
                 if (!visited[outboundEdges[i].getDestID()]) {
                     q.push(g.getNode(outboundEdges[i].getDestID()));
                     visited[outboundEdges[i].getDestID()] = true;
                 }
             }
+#ifdef WITHTIME 
+            }
+#endif
             
         }
-    };
-    {   utimer tsbfs("SERIAL_TIME");
-        bfs();
     }
     printf ("X = %d has %d instances \n",  X, occurancesX);
     return 0;

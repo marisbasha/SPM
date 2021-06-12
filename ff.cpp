@@ -1,7 +1,3 @@
-#if !defined(FF_INITIAL_BARRIER)
-// to run this test we need to be sure that the initial barrier is executed
-#define FF_INITIAL_BARRIER
-#endif
 
 #include <vector>
 #include <cstdio>
@@ -20,7 +16,8 @@
 
 #include "utils.cpp"
 #include "utimer.cpp"
-
+#include "h/barrier.hpp"
+#include "src/bfs.cpp"
 
 using namespace ff;
 using namespace std;
@@ -34,59 +31,12 @@ int num_nodes = 100;
 int min_edges_per_node = 1;
 int max_edges_per_node = 5;
 bool is_farm;
-mutex currentQueueGuarder;
-mutex checkCompletionGuarder;
-mutex decreaseActive;
-mutex checkProcessLock;
 Graph<int> graph;
 vector<bool> processed;
 int activeThreads;
 vector< queue< Node<int> > >  firstQueues;
 vector< queue< Node<int> > >  secondQueues;
-int goforanother = 0;
-int goforanother2 = 0;
-
-
-
-class Barrier_
-{
-public:
-  Barrier_() {};
-  Barrier_(const Barrier_&) = delete;
-  Barrier_& operator=(const Barrier_&) = delete;
-  Barrier_( int count) :
-    passed_barrier(0), iteration_number(0), 
-    passed_barrier_reset_value(count)
-  {}
-  void setCount(int count) {
-    passed_barrier_reset_value = count;
-    passed_barrier= 0;
-    iteration_number=0;
-  }
-  void decrease_active_threads(){
-    passed_barrier_reset_value = (passed_barrier_reset_value == 0 ? 0 : passed_barrier_reset_value - 1);
-  }
-  void count_down_and_wait()
-  {
-    int gen = iteration_number.load();
-    if ( ++passed_barrier >= passed_barrier_reset_value) {
-      if (iteration_number.compare_exchange_weak(gen, gen + 1)) {
-        passed_barrier = 0;
-      }
-      return;
-    }
-
-    while ((gen == iteration_number) && (passed_barrier <= passed_barrier_reset_value))
-      std::this_thread::yield();
-  }
-
-private:
-  std::atomic< int> passed_barrier;
-  std::atomic< int> iteration_number;
-  int passed_barrier_reset_value;
-};
-
-Barrier_ work_done;
+MultilevelBarrier work_done;
 
 class Worker:public ff_node {
 public:
@@ -102,65 +52,17 @@ public:
     }
     
     void *svc(void*) {
-        
-        int tid = get_my_id();
-	    queue< Node<int> > currentQueue = firstQueues[tid];
-        queue< Node<int> > nextQueue = secondQueues[tid];
-        bool done = false;
-        int localX = 0;
-        while (!done) {
-            while (!currentQueue.empty()) {
-                currentQueueGuarder.lock();
-                Node<int> current = currentQueue.front();
-                currentQueue.pop();
-                currentQueueGuarder.unlock();
-                if (current.getVal() == X) localX ++;
-                //usleep(5000); // We assume we make work on the current element being processed
-                vector<Edge> outboundEdges = current.getOutboundEdges();
-                for (long unsigned int i = 0; i < outboundEdges.size(); ++i) {
-                    if (!processed[outboundEdges[i].getDestID()]) {
-                        checkProcessLock.lock();
-                        processed[outboundEdges[i].getDestID()] = true;
-                        checkProcessLock.unlock();
-                        nextQueue.push(graph.getNode(outboundEdges[i].getDestID()));
-                    }
-                }
-                
-            }
-            done = true;
-            
-            for (int i = 0; i < nw; ++i) {
-                done |= !firstQueues[i].empty();
-            }
-            currentQueueGuarder.lock();
-            if (!done) {
-                for (int i = 0; i < nw; ++i) {
-                    if (firstQueues[i].size() > 1) {
-                        currentQueue.push(firstQueues[i].front());
-                        firstQueues[i].pop();
-                        break;
-                    }
-                }
-            }
-            currentQueueGuarder.unlock();
-            if(done) {
-                work_done.count_down_and_wait(); // Barrier to wait next iteration
-                queue<Node<int>> t = currentQueue;
-                currentQueue = nextQueue;
-                nextQueue = t;
-                work_done.count_down_and_wait(); // Barrier to wait next iteration
-                if(!currentQueue.empty()) { done = false; }
-            }
-            if(done) {
-                decreaseActive.lock();
-                work_done.decrease_active_threads();
-                decreaseActive.unlock();
-            }
-        }
-        checkCompletionGuarder.lock();
-        occurancesX += localX;
-        checkCompletionGuarder.unlock();
-        
+	    bfs(
+            get_my_id(), 
+            nw,
+            std::ref(X), 
+            std::ref(occurancesX), 
+            std::ref(graph), 
+            std::ref(firstQueues), 
+            std::ref(secondQueues),
+            std::ref(processed),
+            std::ref(work_done)
+        );
         return 0;
     }  
 
@@ -183,7 +85,7 @@ int main(int argc, char *argv[]) {
     if(argc > 7 && !strcmp(argv[7], "farm")) is_farm = true;
 
     
-    auto filename = "data/" + to_string(num_nodes) + "_" + to_string(min_edges_per_node) + "_" + to_string(max_edges_per_node) + ".txt";
+    auto filename = "data/graphs/" + to_string(num_nodes) + "_" + to_string(min_edges_per_node) + "_" + to_string(max_edges_per_node) + ".txt";
     printf ("GRAPHCPP:%d:%d:%d:%d:%d\n", nw, num_nodes, min_edges_per_node, max_edges_per_node, is_farm);
     {   utimer tpg("Graph");
         processGraph(&graph, filename);

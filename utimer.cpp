@@ -26,14 +26,14 @@ public:
     start = std::chrono::system_clock::now();
   }
 
-  ~utimer() {
+  ~utimer() { 
     stop =
       std::chrono::system_clock::now();
     std::chrono::duration<double> elapsed =
       stop - start;
     auto musec =
-      std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
-    
+      std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
+ 
     std::cout << message << " " << musec << " usec" 
 	      << std::endl;
     if(us_elapsed != NULL)

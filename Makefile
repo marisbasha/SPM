@@ -15,10 +15,10 @@ OPTFLAGS	= -O3 -finline-functions -DNDEBUG
 
 
 ff:  ff.cpp
-	$(CXX) $(CXXFLAGS) ${INCLUDES} $(OPTFLAGS) -o $@ $< $(LDFLAGS) $(LINKERFLAG)
+	$(CXX) $(CXXFLAGS) ${INCLUDES} $(OPTFLAGS) -o $@ $< $(LDFLAGS) $(LINKERFLAG) $(ARGS)
 seq: seq.cpp
-	$(CXX) $(CXXFLAGS)  $(OPTFLAGS) -o $@ $<  $(LINKERFLAG)
+	$(CXX) $(CXXFLAGS)  $(OPTFLAGS) -o $@ $<  $(LINKERFLAG) $(ARGS)
 par: par.cpp
-	$(CXX) $(CXXFLAGS) $(OPTFLAGS) -o $@ $< $(LDFLAGS) $(LINKERFLAG)
+	$(CXX) $(CXXFLAGS) $(OPTFLAGS) -o $@ $< $(LDFLAGS) $(LINKERFLAG) $(ARGS)
 grp: grp.cpp
 	$(CXX) $(CXXFLAGS) $(OPTFLAGS) -o $@ $< $(LINKERFLAG)

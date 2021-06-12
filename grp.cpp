@@ -15,7 +15,7 @@ int main(int argc, char** argv)
     int num_nodes = atoi(argv[1]); // We get the number of nodes to be generated 
     int min_edges_per_node = atoi(argv[2]); // We get the minimum number of edges per node
     int max_edges_per_node = atoi(argv[3]); // We get the maximum number of edges per node
-    auto filename = "data/" +to_string(num_nodes) + "_" + to_string(min_edges_per_node) + "_" + to_string(max_edges_per_node) + ".txt";
+    auto filename = "data/graphs/" +to_string(num_nodes) + "_" + to_string(min_edges_per_node) + "_" + to_string(max_edges_per_node) + ".txt";
 
     int max_node_value = 121; // The maximum value of the node
     int num_edges; // The number of edges that will be calculated randomly foreach node
