@@ -40,17 +40,15 @@ int main(int argc, char** argv) {
         Node<int> current;
         q.push(g.getNode(s));
         visited[s] = true;
+
+        while (!q.empty())
+        {
 #ifdef WITHTIME 
             {   utimer tpg("Time 1 while loop");
 #endif
-        while (!q.empty())
-        {
-
             current = q.front();
             q.pop();
-#ifdef WITHTIME 
-            }
-#endif
+
 #ifdef WAIT
             usleep(5000);
 #endif
